@@ -3,6 +3,7 @@
 #include "vga.h"
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <signal.h>
 
 static int tty=2;
 static int tty_inject_device;
@@ -77,11 +78,20 @@ int default_grn[] = {0x00,0x00,0xaa,0x55,0x00,0x00,0xaa,0xaa,
 int default_blu[] = {0x00,0x00,0x00,0x00,0xaa,0xaa,0xaa,0xaa,
     0x55,0x55,0x55,0x55,0xff,0xff,0xff,0xff};
 
+
+
+vncConsolePtr console;
+
+// properly shut the process down.
+void shutdown_server(int sig){
+  rfbShutdownServer(console->screen, TRUE);
+  exit(0);
+}
+
 int main(int argc,char **argv)
 {
   int width=80,height=25;
   char *buffer;
-  vncConsolePtr console;
   char tty_device[64],title[128];
   int i;
   FILE* tty_file;
@@ -117,6 +127,11 @@ int main(int argc,char **argv)
   if(!(console=vcGetConsole(&argc,argv,width,height,&vgaFont,TRUE)))
     exit(1);
 
+  // now we will add a the signal handler to properly close the sockets.
+  signal(SIGINT, shutdown_server);
+  signal(SIGHUP, shutdown_server);
+  signal(SIGTERM, shutdown_server);
+
   for(i=0;i<16;i++) {
     console->screen->colourMap.data.bytes[i*3+0]=default_red[color_table[i]];
     console->screen->colourMap.data.bytes[i*3+1]=default_grn[color_table[i]];
@@ -140,6 +155,8 @@ int main(int argc,char **argv)
 #else
   sprintf(tty_device,"/dev/vcsa%d",tty);
 #endif
+  
+  // Add signal handlers.
 
   while(rfbIsActive(console->screen)) {
     if(!console->currentlyMarking) {
